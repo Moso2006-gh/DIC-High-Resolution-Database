@@ -40,7 +40,7 @@ def create_mask_frame(mask: Path, frame: int, tif_file: Path =".", background: b
             cmap='gray',
             origin='lower',
             vmin=850,
-            vmax=1300
+            vmax=2000
         )
 
     alpha_layer = np.zeros_like(mask_data, dtype=float)
@@ -93,13 +93,14 @@ def create_mask_gif(path_to_masks: Path, file_name: str, output_path: Path, path
         
     if frame is not None:
         image = create_mask_frame(masks[frame], frame, tif_files[frame], background, mask_alpha, dpi)
+        plt.figure(figsize=(6, 6), dpi=dpi)
         plt.imshow(image)
         plt.axis("off")
         plt.show()
         return
     
     images = []
-    for frame, mask in tqdm(enumerate(masks[:cap]), desc="🎬 Creating GIF", file=sys.stdout):        
+    for frame, mask in tqdm(enumerate(masks[:cap]), desc="🎬 Creating GIF", file=sys.stdout, total=min(len(masks), cap)):        
         image = create_mask_frame(mask, frame, tif_files[frame], background, mask_alpha, dpi)
         images.append(image)
 
@@ -180,6 +181,7 @@ def create_track_gif_from_raw_tiffs(track: Track, file_name: str, output_path: P
 
     if frame is not None:
         image = create_track_frame_from_raw_tiffs(track[frame], background, tif_files[frame], y_min, y_max, x_min, x_max, dpi)
+        plt.figure(figsize=(6, 6), dpi=dpi)
         plt.imshow(image)
         plt.axis("off")
         plt.show()
@@ -239,6 +241,7 @@ def create_track_gif_from_db_entry(entry_path: Path, file_name: str, output_path
 
     if frame is not None:
         image = create_track_frame_from_db_entry(track[frame], tiff_files[frame], background, dpi)
+        plt.figure(figsize=(6, 6), dpi=dpi)
         plt.imshow(image)
         plt.axis("off")
         plt.show()
@@ -312,6 +315,7 @@ def create_outlines_gif_from_cells_per_frame(cells_per_frame: List[List[Cell]], 
         
     if frame is not None:
         image = create_outlines_frame(cells, frame, tif_files, background, dpi)
+        plt.figure(figsize=(6, 6), dpi=dpi)
         plt.imshow(image)
         plt.axis("off")
         plt.show()
@@ -418,6 +422,7 @@ def create_all_tracks_gif(tracks: List[Track], file_name: str, output_path: Path
         
     if frame is not None:
         image = create_all_tracks_frame(tracks, colors, frame, tif_files[frame], background, dpi)
+        plt.figure(figsize=(6, 6), dpi=dpi)
         plt.imshow(image)
         plt.axis("off")
         plt.show()
@@ -428,7 +433,9 @@ def create_all_tracks_gif(tracks: List[Track], file_name: str, output_path: Path
     for frame in tqdm(range(min(max_frame, cap)), desc="🎬 Creating GIF", file=sys.stdout):
         image = create_all_tracks_frame(tracks, colors, frame, tif_files[frame], background, dpi)
         images.append(image)
-
+        
+    
+    output_path = Path(output_path)
     output_path.mkdir(exist_ok=True)
     output_file = Path(output_path) / f"{file_name}.gif"
     imageio.mimsave(output_file, images)
@@ -497,10 +504,11 @@ def create_shape_evolution_gif(shape_evolution: List[Cell_Shape], file_name: str
     num_frames, n_points, _ = shape_evolution.shape
     images = []
     
-    colors = plt.cm.viridis(np.linspace(0, 1, 20))
+    colors = plt.cm.Blues(np.linspace(0, 1, 20))
 
     if frame is not None:
         image = create_shape_evolution_frame(shape_evolution, n_points, num_frames, frame, colors, dpi)
+        plt.figure(figsize=(6, 6), dpi=dpi)
         plt.imshow(image)
         plt.axis("off")
         plt.show()
@@ -519,7 +527,6 @@ def create_shape_evolution_gif(shape_evolution: List[Cell_Shape], file_name: str
 def create_shape_evolution_gif_from_db_entry(entry: Path, file_name: str, output_path: Path, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     track = load_track_from_db(entry)
     cell_shape_evolution = np.array([pos["cell"]["shape"] for pos in track])
-    print(cell_shape_evolution.shape)
     create_shape_evolution_gif(cell_shape_evolution, file_name, output_path, cap, frame, dpi)
 
 
@@ -605,6 +612,7 @@ def create_shape_theta_gif_from_track(track: Track, file_name: str, output_path:
     velocities = get_track_velocities(track)
     if frame is not None:
         image = create_shape_theta_frame(track[frame]["cell"]["shape"], velocities[frame], south, dpi)
+        plt.figure(figsize=(6, 6), dpi=dpi)
         plt.imshow(image)
         plt.axis("off")
         plt.show()

@@ -84,7 +84,7 @@ def order_points(points: np.ndarray) -> np.ndarray:
     points_set = set(map(tuple, points))
 
     mean_y = np.mean([y for y, _ in points])
-    candidates = [p for p in points_set if p[0] > mean_y]
+    candidates = [p for p in points_set if p[0] < mean_y]
     xs = sorted(x for _, x in points_set)
     median_x = xs[len(xs) // 2]
 
