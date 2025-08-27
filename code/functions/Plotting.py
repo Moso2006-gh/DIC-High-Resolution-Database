@@ -146,7 +146,7 @@ def create_mask_gif(path_to_masks: Path, file_name: str, output_path: Path, path
         return [image]
     
     images = []
-    for frame, mask in tqdm(enumerate(masks[:cap]), desc="🎬 Creating GIF", file=sys.stdout, total=min(len(masks), cap)):        
+    for frame, mask in tqdm(enumerate(masks[:(cap + 1)]), desc="🎬 Creating GIF", file=sys.stdout, total=min(len(masks), cap)):        
         image = create_mask_frame(mask, frame, tif_files[frame], background, mask_alpha, dpi)
         images.append(image)
 
@@ -164,11 +164,11 @@ def create_track_frame_from_raw_tiffs(track: Track, frame: int, background: bool
     fig, ax = plt.subplots(figsize=(6,6), dpi=dpi)
     ax.set_title(f"Frame {position["frame"]}")
     
-    ax.scatter(outline[:, 1], outline[:, 0], s=4)
+    ax.scatter(outline[:, 1], outline[:, 0], s=4, zorder=2)
     
-    centroids = np.vstack([position["cell"]["centroid"] for position in track[:frame]])
-    ax.plot(centroids[:, 1], centroids[:, 0], color="red")
-    ax.scatter(centroid[1], centroid[0], c='red', s=4, label='Centroid')
+    centroids = np.vstack([position["cell"]["centroid"] for position in track[:(frame+1)]])
+    ax.plot(centroids[:, 1], centroids[:, 0], color="red", lw=2, zorder=1)
+    ax.scatter(centroid[1], centroid[0], c='red', s=8, label='Centroid', zorder=2)
     
     if background:
         background_img = imageio.imread(tif_file)
@@ -217,12 +217,12 @@ def create_track_gif_from_raw_tiffs(track: Track, file_name: str, output_path: P
     Returns:
         None
     """
-    tif_files, vmin, vmax = get_tif_files(path_to_tifs, background, len(track[:cap]))
+    tif_files, vmin, vmax = get_tif_files(path_to_tifs, background, len(track[:(cap + 1)]))
     if flip:
         track = flip_track(track)
     
-    all_y = np.concatenate([position["cell"]["shape"][:, 0] + position["cell"]["centroid"][0] for position in track[:cap]])
-    all_x = np.concatenate([position["cell"]["shape"][:, 1] + position["cell"]["centroid"][1] for position in track[:cap]])
+    all_y = np.concatenate([position["cell"]["shape"][:, 0] + position["cell"]["centroid"][0] for position in track[:(cap + 1)]])
+    all_x = np.concatenate([position["cell"]["shape"][:, 1] + position["cell"]["centroid"][1] for position in track[:(cap + 1)]])
 
     y_min, y_max = int(all_y.min() - margin), int(all_y.max() + margin)
     x_min, x_max = int(all_x.min() - margin), int(all_x.max() + margin)
@@ -279,7 +279,7 @@ def create_track_gif_from_db_entry(entry_path: Path, file_name: str, output_path
     output_path = Path(output_path)
 
     track = load_track_from_db(entry_path)
-    tif_files, vmin, vmax = get_tif_files((entry_path / "tiffs"), len(track[:cap]))
+    tif_files, vmin, vmax = get_tif_files((entry_path / "tiffs"), len(track[:(cap + 1)]))
 
     if frame is not None:
         image = create_track_frame_from_db_entry(track[frame], tif_files[frame], background, vmin, vmax, dpi)
@@ -287,7 +287,7 @@ def create_track_gif_from_db_entry(entry_path: Path, file_name: str, output_path
         return [image]
     
     images = []
-    for p, pos in tqdm(enumerate(track[:cap]), desc="🎬 Creating GIF", total=len(track[:cap])):
+    for p, pos in tqdm(enumerate(track[:(cap + 1)]), desc="🎬 Creating GIF", total=len(track[:(cap + 1)])):
         image = create_track_frame_from_db_entry(pos, tif_files[p], background, vmin, vmax, dpi)
         images.append(image)
         
@@ -346,7 +346,7 @@ def create_outlines_gif_from_cells_per_frame(cells_per_frame: List[List[Cell]], 
     Returns:
         None
     """
-    tif_files, vmin, vmax = get_tif_files(path_to_tifs, background, len(cells_per_frame[:cap]))
+    tif_files, vmin, vmax = get_tif_files(path_to_tifs, background, len(cells_per_frame[:(cap + 1)]))
         
     if frame is not None:
         image = create_outlines_frame(cells_per_frame[frame], frame, tif_files[frame], background, vmin, vmax, dpi)
@@ -354,7 +354,7 @@ def create_outlines_gif_from_cells_per_frame(cells_per_frame: List[List[Cell]], 
         return [image]
 
     images = []
-    for frame, cells in enumerate(tqdm(cells_per_frame[:cap], desc="🎬 Creating GIF", file=sys.stdout)):
+    for frame, cells in enumerate(tqdm(cells_per_frame[:(cap + 1)], desc="🎬 Creating GIF", file=sys.stdout)):
         image = create_outlines_frame(cells, frame, tif_files[frame], background, vmin, vmax, dpi)
         images.append(image)
 
@@ -385,7 +385,7 @@ def create_outlines_gif_from_tracks(tracks: List[Track], file_name: str, output_
         tracks = flip_tracks(tracks)
         
     cells_per_frame = get_cells_per_frame_from_tracks(tracks)
-    create_outlines_gif_from_cells_per_frame(cells_per_frame[:cap], file_name, output_path, path_to_tifs, background, cap, frame, dpi)
+    create_outlines_gif_from_cells_per_frame(cells_per_frame[:(cap + 1)], file_name, output_path, path_to_tifs, background, cap, frame, dpi)
 
 def create_outlines_gif_from_path_to_tracks(path_to_tracks: Path, file_name: str, output_path: Path, root_masks: Path = Path("../masks/"), background: bool = False, root_tifs: Path = Path("../data/"), flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100):
     create_gif_from_tracks_path(create_outlines_gif_from_tracks, path_to_tracks, file_name, output_path, root_masks, background, root_tifs, flip, cap, frame, dpi)
@@ -651,7 +651,7 @@ def create_shape_theta_gif_from_track(track: Track, file_name: str, output_path:
         return [image]
     
     images = []
-    for i, pos in tqdm(enumerate(track[:cap]), desc="🎬 Creating GIF", file=sys.stdout, total=len(track[:cap])):
+    for i, pos in tqdm(enumerate(track[:(cap + 1)]), desc="🎬 Creating GIF", file=sys.stdout, total=len(track[:(cap + 1)])):
         image = create_shape_theta_frame(pos["cell"]["shape"], velocities[i], south, dpi)
         images.append(image)
         
