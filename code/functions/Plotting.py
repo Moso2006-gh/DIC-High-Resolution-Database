@@ -1,4 +1,5 @@
 import sys
+import functools
 import numpy as np
 from tqdm.auto import tqdm
 from pathlib import Path
@@ -6,9 +7,36 @@ import imageio.v2 as imageio
 from typing import List
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from .Miscellaneous import load_track_from_db
+from .Miscellaneous import load_track_from_db, get_tif_files
 from .Datastructures import Cell, Track, Track_Point, Track_Info_Point, Cell_Shape
 from .DIC_analysis import get_cells_per_frame_from_tracks, get_shape_theta, get_track_velocities
+
+def gif(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # Call the original function to get the list of frames
+        images = func(*args, **kwargs)
+
+        # Extract output path and filename from kwargs
+        output_path = kwargs.get("output_path", ".")
+        file_name = kwargs.get("file_name", "output")
+
+        output_file = Path(output_path) / f"{file_name}.gif"
+        output_file.parent.mkdir(exist_ok=True, parents=True)
+
+        # Save GIF
+        imageio.mimsave(output_file, images)
+        print(f"Saved GIF to {output_file}")
+
+        return output_file
+    return wrapper
+
+def plot_frame(image: np.ndarray, dpi: int) -> None:
+    plt.figure(figsize=(6, 6), dpi=dpi)
+    plt.imshow(image)
+    plt.axis("off")
+    plt.show()
+    return
 
 def create_mask_frame(mask: Path, frame: int, tif_file: Path =".", background: bool = False, mask_alpha: float = 0.85, dpi: int = 100) -> np.ndarray:
     """
@@ -64,7 +92,8 @@ def create_mask_frame(mask: Path, frame: int, tif_file: Path =".", background: b
     
     return image
 
-def create_mask_gif(path_to_masks: Path, file_name: str, output_path: Path, path_to_tifs: Path = Path("."), background: bool = False, mask_alpha: int = 0.85, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
+@gif
+def create_mask_gif(path_to_masks: Path, file_name: str, output_path: Path, path_to_tifs: Path = Path("."), background: bool = False, mask_alpha: int = 0.85, cap: int = 9000, frame: int = None, dpi: int = 100) -> List[np.ndarray]:
     """
     Create a GIF visualizing mask overlays across multiple frames.
 
@@ -93,20 +122,15 @@ def create_mask_gif(path_to_masks: Path, file_name: str, output_path: Path, path
         
     if frame is not None:
         image = create_mask_frame(masks[frame], frame, tif_files[frame], background, mask_alpha, dpi)
-        plt.figure(figsize=(6, 6), dpi=dpi)
-        plt.imshow(image)
-        plt.axis("off")
-        plt.show()
-        return
+        plot_frame(image, dpi)
+        return [image]
     
     images = []
     for frame, mask in tqdm(enumerate(masks[:cap]), desc="🎬 Creating GIF", file=sys.stdout, total=min(len(masks), cap)):        
         image = create_mask_frame(mask, frame, tif_files[frame], background, mask_alpha, dpi)
         images.append(image)
 
-    output_file = Path(output_path) / f"{file_name}.gif"
-    imageio.mimsave(output_file, images)
-    print(f"Saved GIF with tracks and IDs to {output_path}")
+    return images
 
 
 def create_track_frame_from_raw_tiffs(position: Track_Point, background: bool, tif_file: Path, y_min: int, y_max: int, x_min: int, x_max: int, dpi: int = 100) -> np.ndarray:
@@ -145,6 +169,7 @@ def create_track_frame_from_raw_tiffs(position: Track_Point, background: bool, t
     
     return image
 
+@gif
 def create_track_gif_from_raw_tiffs(track: Track, file_name: str, output_path: Path, margin: int = 20, path_to_tifs: Path = Path("."), background: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     """
     Create a GIF visualizing a single cell track.
@@ -168,33 +193,24 @@ def create_track_gif_from_raw_tiffs(track: Track, file_name: str, output_path: P
         None
     """
     images = []
-    if background:
-        tif_files = sorted(Path(path_to_tifs).glob("*.tif"))
-    else:
-        tif_files = np.zeros(len(track))
+    tif_files = get_tif_files(path_to_tifs, background, len(track[:cap]))
     
     all_y = np.concatenate([position["cell"]["shape"][:, 0] + position["cell"]["centroid"][0] for position in track])
     all_x = np.concatenate([position["cell"]["shape"][:, 1] + position["cell"]["centroid"][1] for position in track])
 
-    y_min, y_max = all_y.min() - margin, all_y.max() + margin
-    x_min, x_max = all_x.min() - margin, all_x.max() + margin
+    y_min, y_max = int(all_y.min() - margin), int(all_y.max() + margin)
+    x_min, x_max = int(all_x.min() - margin), int(all_x.max() + margin)
 
     if frame is not None:
         image = create_track_frame_from_raw_tiffs(track[frame], background, tif_files[frame], y_min, y_max, x_min, x_max, dpi)
-        plt.figure(figsize=(6, 6), dpi=dpi)
-        plt.imshow(image)
-        plt.axis("off")
-        plt.show()
-        return
+        plot_frame(image, dpi)
+        return [image]
 
-    for _, position in enumerate(tqdm(track[:cap], desc="🎬 Creating GIF", file=sys.stdout)):
+    for frame, position in enumerate(tqdm(track[:cap], desc="🎬 Creating GIF", file=sys.stdout)):
         image = create_track_frame_from_raw_tiffs(position, background, tif_files[frame], y_min, y_max, x_min, x_max, dpi)
         images.append(image)
 
-    output_path.mkdir(exist_ok=True)
-    output_file = Path(output_path) / f"{file_name}.gif"
-    imageio.mimsave(output_file, images)
-    print(f"Saved GIF with tracks and IDs to {output_path}")
+    return images
 
 
 def create_track_frame_from_db_entry(position: Track_Info_Point, tif_file: Path, background: bool, dpi: int = 100):
@@ -287,6 +303,7 @@ def create_outlines_frame(cells: List[Cell], frame_index: int, tif_file: Path, b
     plt.close(fig) 
     return image
 
+@gif
 def create_outlines_gif_from_cells_per_frame(cells_per_frame: List[List[Cell]], file_name: str, output_path: Path, path_to_tifs: Path = Path("."), background: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     """
     Create a GIF visualizing cell outlines for multiple frames.
@@ -308,29 +325,19 @@ def create_outlines_gif_from_cells_per_frame(cells_per_frame: List[List[Cell]], 
     Returns:
         None
     """
-    if background:
-        tif_files = sorted(Path(path_to_tifs).glob("*.tif"))
-    else:
-        tif_files = np.zeros(len(cells_per_frame))
+    tif_files = get_tif_files(path_to_tifs, background, len(cells_per_frame[:cap]))
         
     if frame is not None:
         image = create_outlines_frame(cells, frame, tif_files, background, dpi)
-        plt.figure(figsize=(6, 6), dpi=dpi)
-        plt.imshow(image)
-        plt.axis("off")
-        plt.show()
-        return
-
+        plot_frame(image, dpi)
+        return [image]
 
     images = []
     for frame, cells in enumerate(tqdm(cells_per_frame[:cap], desc="🎬 Creating GIF", file=sys.stdout)):
         image = create_outlines_frame(cells, frame, tif_files[frame], background, dpi)
         images.append(image)
 
-    output_path.mkdir(exist_ok=True)
-    output_file = Path(output_path) / f"{file_name}.gif"
-    imageio.mimsave(output_file, images)
-    print(f"Saved GIF with tracks and IDs to {output_path}")
+    return images
 
 def create_outlines_gif_from_tracks(tracks: List[Track], file_name: str, output_path: Path, path_to_tifs: Path = Path("."), background: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     """
@@ -397,6 +404,7 @@ def create_all_tracks_frame(tracks: List[Track], colors: List[plt.cm.tab20], max
     plt.close(fig)
     return image
 
+@gif
 def create_all_tracks_gif(tracks: List[Track], file_name: str, output_path: Path, path_to_tifs: Path = Path("."), background: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     """
     Create a GIF visualizing cell tracks for multiple frames.
@@ -415,31 +423,20 @@ def create_all_tracks_gif(tracks: List[Track], file_name: str, output_path: Path
     """
     max_frame = max([pos["frame"] for track in tracks for pos in track])
     colors = [plt.cm.tab20(i % 20) for i in range(len(tracks))]
-    if background:
-        tif_files = sorted(Path(path_to_tifs).glob("*.tif"))
-    else:
-        tif_files = np.zeros(max_frame)
+    
+    tif_files = get_tif_files(path_to_tifs, background, min(max_frame, cap))
         
     if frame is not None:
         image = create_all_tracks_frame(tracks, colors, frame, tif_files[frame], background, dpi)
-        plt.figure(figsize=(6, 6), dpi=dpi)
-        plt.imshow(image)
-        plt.axis("off")
-        plt.show()
-        return
-
+        plot_frame(image, dpi)
+        return [image]
 
     images = []
     for frame in tqdm(range(min(max_frame, cap)), desc="🎬 Creating GIF", file=sys.stdout):
         image = create_all_tracks_frame(tracks, colors, frame, tif_files[frame], background, dpi)
         images.append(image)
         
-    
-    output_path = Path(output_path)
-    output_path.mkdir(exist_ok=True)
-    output_file = Path(output_path) / f"{file_name}.gif"
-    imageio.mimsave(output_file, images)
-    print(f"Saved GIF with tracks and IDs to {output_path}")
+    return images
 
 
 def create_shape_evolution_frame(shape_evolution: List[Cell_Shape], n_points: int, num_frames: int, frame_index: int, colors: plt.cm.hsv, dpi: int = 100) -> np.ndarray:
@@ -481,6 +478,7 @@ def create_shape_evolution_frame(shape_evolution: List[Cell_Shape], n_points: in
 
     return image
 
+@gif
 def create_shape_evolution_gif(shape_evolution: List[Cell_Shape], file_name: str, output_path: Path, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     """
     Create a GIF showing the temporal evolution of a cell shape.
@@ -508,21 +506,14 @@ def create_shape_evolution_gif(shape_evolution: List[Cell_Shape], file_name: str
 
     if frame is not None:
         image = create_shape_evolution_frame(shape_evolution, n_points, num_frames, frame, colors, dpi)
-        plt.figure(figsize=(6, 6), dpi=dpi)
-        plt.imshow(image)
-        plt.axis("off")
-        plt.show()
-        return
+        plot_frame(image, dpi)
+        return [image]
 
     for frame_index in tqdm(range(1, min(num_frames, cap)), desc="🎬 Creating GIF", file=sys.stdout):
         image = create_shape_evolution_frame(shape_evolution, n_points, num_frames, frame_index, colors, dpi)
         images.append(image) 
-    
-    output_path = Path(output_path)
-    output_path.mkdir(exist_ok=True)
-    output_file = Path(output_path) / f"{file_name}.gif"
-    imageio.mimsave(output_file, images)
-    print(f"Saved GIF with tracks and IDs to {output_path}")
+
+    return images
 
 def create_shape_evolution_gif_from_db_entry(entry: Path, file_name: str, output_path: Path, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     track = load_track_from_db(entry)
@@ -590,6 +581,7 @@ def create_shape_theta_frame(cell_shape: Cell_Shape, velocity: np.ndarray, south
     plt.close(fig)
     return image
 
+@gif
 def create_shape_theta_gif_from_track(track: Track, file_name: str, output_path: Path, south: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     """
     Create a GIF visualizing the orientation (theta) of cell shapes over time.
@@ -612,19 +604,15 @@ def create_shape_theta_gif_from_track(track: Track, file_name: str, output_path:
     velocities = get_track_velocities(track)
     if frame is not None:
         image = create_shape_theta_frame(track[frame]["cell"]["shape"], velocities[frame], south, dpi)
-        plt.figure(figsize=(6, 6), dpi=dpi)
-        plt.imshow(image)
-        plt.axis("off")
-        plt.show()
-        return
+        plot_frame(image, dpi)
+        return [image]
     
     images = []
     for i, pos in tqdm(enumerate(track[:cap]), desc="🎬 Creating GIF", file=sys.stdout, total=len(track[:cap])):
         image = create_shape_theta_frame(pos["cell"]["shape"], velocities[i], south, dpi)
         images.append(image)
-    gif_path = Path(output_path) / f"{file_name}.gif"
-    imageio.mimsave(gif_path, images, fps=5)
-    print(f"✅ GIF saved at {gif_path}")
+        
+    return images
 
 def create_shape_theta_gif_from_db_entry(entry: Path, file_name: str, output_path: Path, south: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     track = load_track_from_db(entry)

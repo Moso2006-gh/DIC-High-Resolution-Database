@@ -4,6 +4,7 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 from .Datastructures import Track_Info
+import imageio.v2 as imageio
 
 def create_log(name_of_log : str, path_to_logs : Path) -> None:
     """
@@ -39,6 +40,12 @@ def create_log(name_of_log : str, path_to_logs : Path) -> None:
     sys.stdout = Tee(sys.__stdout__, log_file)
     sys.stderr = Tee(sys.__stderr__, log_file)
     return None
+
+def get_tif_files(path_to_tifs: Path, background: bool, max_length=9000) -> np.ndarray:
+    if background:
+        return sorted(Path(path_to_tifs).glob("*.tif"))
+    else:
+        return np.zeros(max_length)
 
 def convert_np_to_json(o):
     if isinstance(o, np.ndarray):
