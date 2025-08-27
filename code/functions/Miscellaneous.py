@@ -47,7 +47,6 @@ def get_tif_files(path_to_tifs: Path, background: bool, max_length=9000) -> Tupl
         tif_files = sorted(Path(path_to_tifs).glob("*.tif"))
         background_img = imageio.imread(tif_files[0])
         vmin, vmax = np.percentile(background_img, [0.01, 99.9])  # 1st and 99th percentiles
-        print(vmin, vmax)
         return tif_files, vmin, vmax
     else:
         return np.zeros(max_length)

@@ -1,36 +1,53 @@
 import sys
+import inspect
 import functools
 import numpy as np
 from tqdm.auto import tqdm
 from pathlib import Path
 import imageio.v2 as imageio
-from typing import List
 import matplotlib.pyplot as plt
+from typing import List, Callable
 from matplotlib.lines import Line2D
 from sklearn.decomposition import PCA
-from .Datastructures import Cell, Track, Track_Point, Track_Info_Point, Cell_Shape
+from .Datastructures import Cell, Track, Track_Info_Point, Cell_Shape
 from .Miscellaneous import load_track_from_db, get_tif_files, flip_track, flip_tracks
 from .DIC_analysis import get_cells_per_frame_from_tracks, get_shape_theta, get_track_velocities
 
-def gif(func):
+# Helper
+def gif(func: Callable) -> Callable:
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        # Call the original function to get the list of frames
+        # Bind args/kwargs to the function's signature
+        sig = inspect.signature(func)
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+
+        # Extract by name (works regardless of positional/keyword call)
+        file_name = bound.arguments["file_name"]
+        output_path = bound.arguments["output_path"]
+
+        # Call the original function
         images = func(*args, **kwargs)
 
-        # Extract output path and filename from kwargs
-        output_path = kwargs.get("output_path", ".")
-        file_name = kwargs.get("file_name", "output")
-
+        # Build path and save
         output_file = Path(output_path) / f"{file_name}.gif"
         output_file.parent.mkdir(exist_ok=True, parents=True)
-
-        # Save GIF
         imageio.mimsave(output_file, images)
-        print(f"Saved GIF to {output_file}")
 
+        print(f"🎬 Saved GIF to {output_file}")
         return output_file
     return wrapper
+
+def create_gif_from_tracks_path(func: Callable, path_to_tracks: Path, file_name: str, output_path: Path, root_masks: Path = Path("../masks/"), background: bool = False, root_tifs: Path = Path("../data/"), flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
+    tracks = np.load(Path(path_to_tracks), allow_pickle=True)
+    relative = (Path(path_to_tracks).relative_to(Path(root_masks))).parent
+    
+    if background:
+        path_to_tifs = Path(root_tifs) / relative / "Default"
+    else:
+        path_to_tifs = "."
+
+    return func(tracks, file_name, output_path, path_to_tifs, background, flip, cap, frame, dpi)
 
 def plot_frame(image: np.ndarray, dpi: int) -> None:
     plt.figure(figsize=(6, 6), dpi=dpi)
@@ -40,7 +57,7 @@ def plot_frame(image: np.ndarray, dpi: int) -> None:
     return
 
 
-#Mask
+# Mask
 def create_mask_frame(mask: Path, frame: int, tif_file: Path =".", background: bool = False, mask_alpha: float = 0.85, dpi: int = 100) -> np.ndarray:
     """
     Create a single RGB image with a labeled mask overlay.
@@ -136,7 +153,7 @@ def create_mask_gif(path_to_masks: Path, file_name: str, output_path: Path, path
     return images
 
 
-#Track from raw tiff
+# Track from raw tiff
 def create_track_frame_from_raw_tiffs(track: Track, frame: int, background: bool, tif_file: Path, vmin: int, vmax: int, y_min: int, y_max: int, x_min: int, x_max: int, dpi: int = 100) -> np.ndarray:
     position = track[frame]
     cell = position["cell"]
@@ -223,7 +240,7 @@ def create_track_gif_from_raw_tiffs(track: Track, file_name: str, output_path: P
     return images
 
 
-#Track from db entry
+# Track from db entry
 def create_track_frame_from_db_entry(position: Track_Info_Point, tif_file: Path, background: bool, vmin: int, vmax: int, dpi: int = 100):
     frame = position["frame"]
     cell = position["cell"]
@@ -276,7 +293,8 @@ def create_track_gif_from_db_entry(entry_path: Path, file_name: str, output_path
         
     return images
   
-        
+   
+# Outlines     
 def create_outlines_frame(cells: List[Cell], frame_index: int, tif_file: Path, background: bool, vmin: int, vmax: int, dpi: int = 100) -> np.ndarray:
     fig, ax = plt.subplots(dpi=dpi)
     ax.set_title(f"Frame {frame_index}")
@@ -331,7 +349,7 @@ def create_outlines_gif_from_cells_per_frame(cells_per_frame: List[List[Cell]], 
     tif_files, vmin, vmax = get_tif_files(path_to_tifs, background, len(cells_per_frame[:cap]))
         
     if frame is not None:
-        image = create_outlines_frame(cells, frame, tif_files, background, vmin, vmax, dpi)
+        image = create_outlines_frame(cells_per_frame[frame], frame, tif_files[frame], background, vmin, vmax, dpi)
         plot_frame(image, dpi)
         return [image]
 
@@ -342,7 +360,7 @@ def create_outlines_gif_from_cells_per_frame(cells_per_frame: List[List[Cell]], 
 
     return images
 
-def create_outlines_gif_from_tracks(tracks: List[Track], file_name: str, output_path: Path, path_to_tifs: Path = Path("."), background: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
+def create_outlines_gif_from_tracks(tracks: List[Track], file_name: str, output_path: Path, path_to_tifs: Path = Path("."), background: bool = False, flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     """
     Create a GIF visualizing cell outlines for multiple frames.
 
@@ -363,10 +381,17 @@ def create_outlines_gif_from_tracks(tracks: List[Track], file_name: str, output_
     Returns:
         None
     """
+    if flip:
+        tracks = flip_tracks(tracks)
+        
     cells_per_frame = get_cells_per_frame_from_tracks(tracks)
     create_outlines_gif_from_cells_per_frame(cells_per_frame[:cap], file_name, output_path, path_to_tifs, background, cap, frame, dpi)
 
+def create_outlines_gif_from_path_to_tracks(path_to_tracks: Path, file_name: str, output_path: Path, root_masks: Path = Path("../masks/"), background: bool = False, root_tifs: Path = Path("../data/"), flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100):
+    create_gif_from_tracks_path(create_outlines_gif_from_tracks, path_to_tracks, file_name, output_path, root_masks, background, root_tifs, flip, cap, frame, dpi)
 
+
+# All Tracks
 def create_all_tracks_frame(tracks: List[Track], colors: List[plt.cm.tab20], max_frame: int, tif_file: Path, background: bool, vmin: int, vmax: int, dpi: int = 100) -> np.ndarray:
     fig, ax = plt.subplots(figsize=(6,6), dpi=dpi)
     for t, track in enumerate(tracks):
@@ -386,6 +411,14 @@ def create_all_tracks_frame(tracks: List[Track], colors: List[plt.cm.tab20], max
         centroids = np.array(centroids)
         ax.plot(centroids[:, 1], centroids[:, 0], color=color)
         ax.scatter(last_outline[:, 1], last_outline[:, 0], s=0.1, color=color)
+        
+        last_cy, last_cx = centroids[-1]
+        ax.text(
+            last_cx, last_cy, str(t),
+            fontsize=6, color=color,
+            ha="center", va="center",
+            bbox=dict(facecolor="white", alpha=0.5, edgecolor="none", pad=0.5)
+        )
     
     if background:
         background_img = imageio.imread(tif_file)
@@ -408,7 +441,7 @@ def create_all_tracks_frame(tracks: List[Track], colors: List[plt.cm.tab20], max
     return image
 
 @gif
-def create_all_tracks_gif(tracks: List[Track], file_name: str, output_path: Path, path_to_tifs: Path = Path("."), background: bool = False, flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
+def create_all_tracks_gif_from_tracks(tracks: List[Track], file_name: str, output_path: Path, path_to_tifs: Path = Path("."), background: bool = False, flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     """
     Create a GIF visualizing cell tracks for multiple frames.
 
@@ -424,11 +457,11 @@ def create_all_tracks_gif(tracks: List[Track], file_name: str, output_path: Path
         cap (int, optional): Cap the max amount of frames of the GIF.
         frame (int, optional): If provided, only display a single frame instead of creating a full GIF.
     """
+    max_frame = max([pos["frame"] for track in tracks for pos in track])
     tif_files, vmin, vmax = get_tif_files(path_to_tifs, background, min(max_frame, cap))
     if flip:
         tracks = flip_tracks(tracks)
         
-    max_frame = max([pos["frame"] for track in tracks for pos in track])
     colors = [plt.cm.tab20(i % 20) for i in range(len(tracks))]
     
     if frame is not None:
@@ -443,7 +476,11 @@ def create_all_tracks_gif(tracks: List[Track], file_name: str, output_path: Path
         
     return images
 
+def create_all_tracks_gif_from_path_to_tracks(path_to_tracks: Path, file_name: str, output_path: Path, root_masks: Path = Path("../masks/"), background: bool = False, root_tifs: Path = Path("../data/"), flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100):
+    create_gif_from_tracks_path(create_all_tracks_gif_from_tracks, path_to_tracks, file_name, output_path, root_masks, background, root_tifs, flip, cap, frame, dpi)
 
+
+# Shape evolution
 def create_shape_evolution_frame(shape_evolution: List[Cell_Shape], n_points: int, num_frames: int, frame_index: int, colors: plt.cm.hsv, dpi: int = 100) -> np.ndarray:
     fig, ax = plt.subplots(dpi=dpi)
 
@@ -526,6 +563,7 @@ def create_shape_evolution_gif_from_db_entry(entry: Path, file_name: str, output
     create_shape_evolution_gif(cell_shape_evolution, file_name, output_path, cap, frame, dpi)
 
 
+# Shape theta
 def create_shape_theta_frame(cell_shape: Cell_Shape, velocity: np.ndarray, south: bool = False, dpi: int = 100) -> np.ndarray:
     """
     Generate a single frame showing cell shape, velocity vector, and orientation (theta).
