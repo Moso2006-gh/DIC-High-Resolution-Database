@@ -3,7 +3,8 @@ import json
 import numpy as np
 from pathlib import Path
 from datetime import datetime
-from .Datastructures import Track_Info
+from typing import List, Tuple
+from .Datastructures import Track_Info, Track
 import imageio.v2 as imageio
 
 def create_log(name_of_log : str, path_to_logs : Path) -> None:
@@ -41,9 +42,13 @@ def create_log(name_of_log : str, path_to_logs : Path) -> None:
     sys.stderr = Tee(sys.__stderr__, log_file)
     return None
 
-def get_tif_files(path_to_tifs: Path, background: bool, max_length=9000) -> np.ndarray:
+def get_tif_files(path_to_tifs: Path, background: bool, max_length=9000) -> Tuple[np.ndarray, int, int]:
     if background:
-        return sorted(Path(path_to_tifs).glob("*.tif"))
+        tif_files = sorted(Path(path_to_tifs).glob("*.tif"))
+        background_img = imageio.imread(tif_files[0])
+        vmin, vmax = np.percentile(background_img, [0.01, 99.9])  # 1st and 99th percentiles
+        print(vmin, vmax)
+        return tif_files, vmin, vmax
     else:
         return np.zeros(max_length)
 
@@ -85,7 +90,18 @@ def load_track_from_db(path_to_db_entry: Path) -> Track_Info:
         json_data = json.load(f)
     return convert_json_to_np(json_data)
 
-def angle_between(u, v):
+def flip_track(track: Track, max_y: int = 2200) -> Track:
+    for pos in track:
+        pos["cell"]["shape"][:, 0] = -pos["cell"]["shape"][:, 0]
+        pos["cell"]["centroid"][0] = max_y - pos["cell"]["centroid"][0]
+    return track
+
+def flip_tracks(tracks: List[Track], max_y: int = 2200) -> List[Track]:
+    for track in tracks:
+        track = flip_track(track, max_y)
+    return tracks
+
+def angle_between(u: np.ndarray, v: np.ndarray) -> float:
     u = np.array(u)
     v = np.array(v)
     

@@ -7,8 +7,9 @@ import imageio.v2 as imageio
 from typing import List
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from .Miscellaneous import load_track_from_db, get_tif_files
+from sklearn.decomposition import PCA
 from .Datastructures import Cell, Track, Track_Point, Track_Info_Point, Cell_Shape
+from .Miscellaneous import load_track_from_db, get_tif_files, flip_track, flip_tracks
 from .DIC_analysis import get_cells_per_frame_from_tracks, get_shape_theta, get_track_velocities
 
 def gif(func):
@@ -38,6 +39,8 @@ def plot_frame(image: np.ndarray, dpi: int) -> None:
     plt.show()
     return
 
+
+#Mask
 def create_mask_frame(mask: Path, frame: int, tif_file: Path =".", background: bool = False, mask_alpha: float = 0.85, dpi: int = 100) -> np.ndarray:
     """
     Create a single RGB image with a labeled mask overlay.
@@ -133,18 +136,23 @@ def create_mask_gif(path_to_masks: Path, file_name: str, output_path: Path, path
     return images
 
 
-def create_track_frame_from_raw_tiffs(position: Track_Point, background: bool, tif_file: Path, y_min: int, y_max: int, x_min: int, x_max: int, dpi: int = 100) -> np.ndarray:
-    frame = position["frame"]
+#Track from raw tiff
+def create_track_frame_from_raw_tiffs(track: Track, frame: int, background: bool, tif_file: Path, vmin: int, vmax: int, y_min: int, y_max: int, x_min: int, x_max: int, dpi: int = 100) -> np.ndarray:
+    position = track[frame]
     cell = position["cell"]
 
     centroid = cell["centroid"]
     outline = cell["shape"] + centroid
 
     fig, ax = plt.subplots(figsize=(6,6), dpi=dpi)
-    ax.set_title(f"Frame {frame}")
+    ax.set_title(f"Frame {position["frame"]}")
     
     ax.scatter(outline[:, 1], outline[:, 0], s=4)
+    
+    centroids = np.vstack([position["cell"]["centroid"] for position in track[:frame]])
+    ax.plot(centroids[:, 1], centroids[:, 0], color="red")
     ax.scatter(centroid[1], centroid[0], c='red', s=4, label='Centroid')
+    
     if background:
         background_img = imageio.imread(tif_file)
         cropped = background_img[y_min:y_max, x_min:x_max]
@@ -153,8 +161,8 @@ def create_track_frame_from_raw_tiffs(position: Track_Point, background: bool, t
             cmap='gray',
             origin='lower',
             extent=[x_min, x_max, y_min, y_max],
-            vmin=850,
-            vmax=1300
+            vmin=vmin,
+            vmax=vmax
         )
 
     ax.set_ylim(y_min, y_max)
@@ -170,7 +178,7 @@ def create_track_frame_from_raw_tiffs(position: Track_Point, background: bool, t
     return image
 
 @gif
-def create_track_gif_from_raw_tiffs(track: Track, file_name: str, output_path: Path, margin: int = 20, path_to_tifs: Path = Path("."), background: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
+def create_track_gif_from_raw_tiffs(track: Track, file_name: str, output_path: Path, margin: int = 20, path_to_tifs: Path = Path("."), background: bool = False, flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     """
     Create a GIF visualizing a single cell track.
 
@@ -192,28 +200,31 @@ def create_track_gif_from_raw_tiffs(track: Track, file_name: str, output_path: P
     Returns:
         None
     """
-    images = []
-    tif_files = get_tif_files(path_to_tifs, background, len(track[:cap]))
+    tif_files, vmin, vmax = get_tif_files(path_to_tifs, background, len(track[:cap]))
+    if flip:
+        track = flip_track(track)
     
-    all_y = np.concatenate([position["cell"]["shape"][:, 0] + position["cell"]["centroid"][0] for position in track])
-    all_x = np.concatenate([position["cell"]["shape"][:, 1] + position["cell"]["centroid"][1] for position in track])
+    all_y = np.concatenate([position["cell"]["shape"][:, 0] + position["cell"]["centroid"][0] for position in track[:cap]])
+    all_x = np.concatenate([position["cell"]["shape"][:, 1] + position["cell"]["centroid"][1] for position in track[:cap]])
 
     y_min, y_max = int(all_y.min() - margin), int(all_y.max() + margin)
     x_min, x_max = int(all_x.min() - margin), int(all_x.max() + margin)
 
     if frame is not None:
-        image = create_track_frame_from_raw_tiffs(track[frame], background, tif_files[frame], y_min, y_max, x_min, x_max, dpi)
+        image = create_track_frame_from_raw_tiffs(track, frame, background, tif_files[frame], vmin, vmax, y_min, y_max, x_min, x_max, dpi)
         plot_frame(image, dpi)
         return [image]
 
-    for frame, position in enumerate(tqdm(track[:cap], desc="🎬 Creating GIF", file=sys.stdout)):
-        image = create_track_frame_from_raw_tiffs(position, background, tif_files[frame], y_min, y_max, x_min, x_max, dpi)
+    images = []
+    for frame in tqdm(range(min(cap, len(track)), desc="🎬 Creating GIF", file=sys.stdout)):
+        image = create_track_frame_from_raw_tiffs(track, frame, background, tif_files[frame], vmin, vmax, y_min, y_max, x_min, x_max, dpi)
         images.append(image)
 
     return images
 
 
-def create_track_frame_from_db_entry(position: Track_Info_Point, tif_file: Path, background: bool, dpi: int = 100):
+#Track from db entry
+def create_track_frame_from_db_entry(position: Track_Info_Point, tif_file: Path, background: bool, vmin: int, vmax: int, dpi: int = 100):
     frame = position["frame"]
     cell = position["cell"]
 
@@ -229,8 +240,8 @@ def create_track_frame_from_db_entry(position: Track_Info_Point, tif_file: Path,
             background_img,
             cmap='gray',
             origin='lower',
-            vmin=800,
-            vmax=2300,
+            vmin=vmin,
+            vmax=vmax,
             extent=[-width/2, width/2, -height/2, height/2]
         )
 
@@ -245,36 +256,28 @@ def create_track_frame_from_db_entry(position: Track_Info_Point, tif_file: Path,
     
     return image
 
+@gif
 def create_track_gif_from_db_entry(entry_path: Path, file_name: str, output_path: Path, background: bool, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     entry_path = Path(entry_path)
     output_path = Path(output_path)
 
     track = load_track_from_db(entry_path)
-    if background:
-        tiff_files = sorted((entry_path / "tiffs").glob("*.tif"), key=lambda f: int(f.stem))
-    else:
-        tiff_files = np.zeros(len(track))
+    tif_files, vmin, vmax = get_tif_files((entry_path / "tiffs"), len(track[:cap]))
 
     if frame is not None:
-        image = create_track_frame_from_db_entry(track[frame], tiff_files[frame], background, dpi)
-        plt.figure(figsize=(6, 6), dpi=dpi)
-        plt.imshow(image)
-        plt.axis("off")
-        plt.show()
-        return
+        image = create_track_frame_from_db_entry(track[frame], tif_files[frame], background, vmin, vmax, dpi)
+        plot_frame(image)
+        return [image]
     
     images = []
     for p, pos in tqdm(enumerate(track[:cap]), desc="🎬 Creating GIF", total=len(track[:cap])):
-        image = create_track_frame_from_db_entry(pos, tiff_files[p], background, dpi)
+        image = create_track_frame_from_db_entry(pos, tif_files[p], background, vmin, vmax, dpi)
         images.append(image)
         
-    output_path.mkdir(exist_ok=True)
-    output_file = Path(output_path) / f"{file_name}.gif"
-    imageio.mimsave(output_file, images)
-    print(f"Saved GIF with tracks and IDs to {output_path}")
+    return images
   
         
-def create_outlines_frame(cells: List[Cell], frame_index: int, tif_file: Path, background: bool, dpi: int = 100) -> np.ndarray:
+def create_outlines_frame(cells: List[Cell], frame_index: int, tif_file: Path, background: bool, vmin: int, vmax: int, dpi: int = 100) -> np.ndarray:
     fig, ax = plt.subplots(dpi=dpi)
     ax.set_title(f"Frame {frame_index}")
 
@@ -284,8 +287,8 @@ def create_outlines_frame(cells: List[Cell], frame_index: int, tif_file: Path, b
             background_img,
             cmap='gray',
             origin='lower',
-            vmin=850,
-            vmax=1300
+            vmin=vmin,
+            vmax=vmax
         )
 
     for cell in cells:
@@ -325,16 +328,16 @@ def create_outlines_gif_from_cells_per_frame(cells_per_frame: List[List[Cell]], 
     Returns:
         None
     """
-    tif_files = get_tif_files(path_to_tifs, background, len(cells_per_frame[:cap]))
+    tif_files, vmin, vmax = get_tif_files(path_to_tifs, background, len(cells_per_frame[:cap]))
         
     if frame is not None:
-        image = create_outlines_frame(cells, frame, tif_files, background, dpi)
+        image = create_outlines_frame(cells, frame, tif_files, background, vmin, vmax, dpi)
         plot_frame(image, dpi)
         return [image]
 
     images = []
     for frame, cells in enumerate(tqdm(cells_per_frame[:cap], desc="🎬 Creating GIF", file=sys.stdout)):
-        image = create_outlines_frame(cells, frame, tif_files[frame], background, dpi)
+        image = create_outlines_frame(cells, frame, tif_files[frame], background, vmin, vmax, dpi)
         images.append(image)
 
     return images
@@ -364,7 +367,7 @@ def create_outlines_gif_from_tracks(tracks: List[Track], file_name: str, output_
     create_outlines_gif_from_cells_per_frame(cells_per_frame[:cap], file_name, output_path, path_to_tifs, background, cap, frame, dpi)
 
 
-def create_all_tracks_frame(tracks: List[Track], colors: List[plt.cm.tab20], max_frame: int, tif_file: Path, background: bool, dpi: int = 100) -> np.ndarray:
+def create_all_tracks_frame(tracks: List[Track], colors: List[plt.cm.tab20], max_frame: int, tif_file: Path, background: bool, vmin: int, vmax: int, dpi: int = 100) -> np.ndarray:
     fig, ax = plt.subplots(figsize=(6,6), dpi=dpi)
     for t, track in enumerate(tracks):
         color = colors[t]
@@ -390,8 +393,8 @@ def create_all_tracks_frame(tracks: List[Track], colors: List[plt.cm.tab20], max
             background_img,
             cmap='gray',
             origin='lower',
-            vmin=850,
-            vmax=2000
+            vmin=vmin,
+            vmax=vmax
         )
     ax.set_axis_off()
     ax.invert_yaxis()
@@ -405,7 +408,7 @@ def create_all_tracks_frame(tracks: List[Track], colors: List[plt.cm.tab20], max
     return image
 
 @gif
-def create_all_tracks_gif(tracks: List[Track], file_name: str, output_path: Path, path_to_tifs: Path = Path("."), background: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
+def create_all_tracks_gif(tracks: List[Track], file_name: str, output_path: Path, path_to_tifs: Path = Path("."), background: bool = False, flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     """
     Create a GIF visualizing cell tracks for multiple frames.
 
@@ -421,19 +424,21 @@ def create_all_tracks_gif(tracks: List[Track], file_name: str, output_path: Path
         cap (int, optional): Cap the max amount of frames of the GIF.
         frame (int, optional): If provided, only display a single frame instead of creating a full GIF.
     """
+    tif_files, vmin, vmax = get_tif_files(path_to_tifs, background, min(max_frame, cap))
+    if flip:
+        tracks = flip_tracks(tracks)
+        
     max_frame = max([pos["frame"] for track in tracks for pos in track])
     colors = [plt.cm.tab20(i % 20) for i in range(len(tracks))]
     
-    tif_files = get_tif_files(path_to_tifs, background, min(max_frame, cap))
-        
     if frame is not None:
-        image = create_all_tracks_frame(tracks, colors, frame, tif_files[frame], background, dpi)
+        image = create_all_tracks_frame(tracks, colors, frame, tif_files[frame], background, vmin, vmax, dpi)
         plot_frame(image, dpi)
         return [image]
 
     images = []
     for frame in tqdm(range(min(max_frame, cap)), desc="🎬 Creating GIF", file=sys.stdout):
-        image = create_all_tracks_frame(tracks, colors, frame, tif_files[frame], background, dpi)
+        image = create_all_tracks_frame(tracks, colors, frame, tif_files[frame], background, vmin, vmax, dpi)
         images.append(image)
         
     return images
@@ -617,3 +622,35 @@ def create_shape_theta_gif_from_track(track: Track, file_name: str, output_path:
 def create_shape_theta_gif_from_db_entry(entry: Path, file_name: str, output_path: Path, south: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
     track = load_track_from_db(entry)
     create_shape_theta_gif_from_track(track, file_name, output_path, south, cap, frame, dpi)
+    
+def plot_point_trayectory_and_instant_change(cell_shape_evolution: List[Cell_Shape], point_index: int) -> np.ndarray: 
+    point_of_interest = cell_shape_evolution[:, point_index] 
+    pca = PCA(n_components=1) 
+    X_pca = pca.fit_transform(point_of_interest).flatten() 
+    X_relative = abs(X_pca - X_pca[0]) 
+    dx = np.diff(X_relative, 1)
+    
+    fig, axes = plt.subplots(2, 1, figsize=(10,7))  # 1 row, 2 columns
+
+    # Left plot: Trajectory
+    axes[0].plot(np.arange(len(X_relative)), X_relative, color='blue', alpha=0.5, linewidth=2, label='Displacement')
+    axes[0].scatter(np.arange(len(X_relative)), X_relative, color='red', s=50, label='Point values')
+    axes[0].set_title(f"Trajectory of Point {point_index}", fontsize=14)
+    axes[0].set_xlabel("Time step")
+    axes[0].set_ylabel("Displacement")
+    axes[0].grid(True, linestyle='--', alpha=0.5)
+    axes[0].legend()
+
+    # Right plot: Derivative
+    axes[1].plot(np.arange(len(dx)), dx, color='green', alpha=0.5, linewidth=2, label='Derivative')
+    axes[1].scatter(np.arange(len(dx)), dx, color='orange', s=50, label='Instantaneous change')
+    axes[1].set_title(f"Instantaneous Change of Point {point_index}", fontsize=14)
+    axes[1].set_xlabel("Time step")
+    axes[1].set_ylabel("Change")
+    axes[1].grid(True, linestyle='--', alpha=0.5)
+    axes[1].legend()
+
+    plt.tight_layout()
+    plt.show()
+    
+    return X_relative
