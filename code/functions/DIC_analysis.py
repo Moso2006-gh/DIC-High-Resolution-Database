@@ -14,6 +14,7 @@ from pathlib import Path
 import imageio.v2 as imageio
 from typing import List, Tuple
 from scipy.spatial import ConvexHull
+from sklearn.decomposition import PCA
 from .Miscellaneous import convert_np_to_json, angle_between
 from .Datastructures import Outline, Centroid, Cell, Track, Cell_Shape, Track_Info
 
@@ -64,7 +65,6 @@ def get_outlines(mask: np.ndarray, buffer: int = 50) -> List[Outline]:
         
         outline = np.column_stack(np.where((mask == label) & filter))
         outlines.append(outline)
-    
     return outlines
 
 def order_points(points: np.ndarray) -> np.ndarray:
@@ -80,7 +80,6 @@ def order_points(points: np.ndarray) -> np.ndarray:
         np.ndarray: Array of points ordered as shape (N, 2), 
         where each row is (row, col). Or empty array if it couldnt close the shape
     """
-    
     points_set = set(map(tuple, points))
 
     mean_y = np.mean([y for y, _ in points])
@@ -151,8 +150,7 @@ def regular_contour_of_points(points: np.ndarray, n: int, order: bool = True) ->
     closest_vector = min(vectors, key=lambda x: angle_between(x, perpendicular))
 
     if np.rad2deg(angle_between(closest_vector, perpendicular)) < 20:
-        regular_contour = np.vstack([regular_contour[0], regular_contour[1:][::-1]])
-    
+        regular_contour = np.vstack([regular_contour[0], regular_contour[1:][::-1]]) 
     return regular_contour
 
 def get_cells_from_mask(mask: np.ndarray, buffer: int = 50, n: int = 100) -> List[Cell]:
@@ -233,8 +231,7 @@ def get_cells_per_frame_from_tracks(tracks: List[Track]) -> List[List[Cell]]:
     for track in tracks:
         for trackpoint in track:
             frame = trackpoint["frame"]
-            cells_per_frame[frame - 1].append(trackpoint["cell"])
-            
+            cells_per_frame[frame - 1].append(trackpoint["cell"])       
     return cells_per_frame
 
 def get_shape_area_and_max_distance(points: np.ndarray) -> Tuple[float, float]:
@@ -304,7 +301,6 @@ def get_cell_tracks(cells_per_frame: List[List[Cell]], max_disp: int = 100, gaps
                 "cell": cells_per_frame[frame][cell_index]
             })
         tracks.append(track)
-
     return tracks
 
 def get_cell_shape_evolution(track: Track) -> List[Cell_Shape]:
@@ -325,8 +321,7 @@ def get_cell_shape_evolution(track: Track) -> List[Cell_Shape]:
     cell_shape_evolution = np.zeros((len(track), n, 2))
 
     for pos_idx, pos in enumerate(track):
-        cell_shape_evolution[pos_idx] = pos["cell"]["shape"]
-        
+        cell_shape_evolution[pos_idx] = pos["cell"]["shape"]   
     return cell_shape_evolution
 
 def get_elongation_over_time(shape_evolution: List[Cell_Shape]) -> np.ndarray:
@@ -349,7 +344,6 @@ def get_elongation_over_time(shape_evolution: List[Cell_Shape]) -> np.ndarray:
         np.ndarray: 1D array of elongation values (length / diameter) for each frame.
                     Frames with insufficient points or hull computation errors are skipped.
     """
-    
     n_frames, _, _ = shape_evolution.shape
     
     areas = np.zeros(n_frames)
@@ -454,7 +448,6 @@ def get_track_velocities(track: Track, step: int = 10) -> np.ndarray:
     last_val = velocities[-1]
     pad = np.tile(last_val, (step, 1)) 
     velocities = np.vstack([velocities, pad]) 
-    
     return velocities
 
 def get_shape_theta(cell_shape: Cell_Shape, velocity: np.ndarray, south: bool = False) -> Tuple[float, np.ndarray]:
@@ -489,7 +482,6 @@ def get_shape_theta(cell_shape: Cell_Shape, velocity: np.ndarray, south: bool = 
     else:
         theta_rad = angle_between(direction, (1, 0))
     theta_deg = np.degrees(theta_rad) % 360
-
     return theta_deg, direction
 
 def get_cell_theta_over_time(track: Track, tolerance: int = 0.3, south: bool = False) -> np.ndarray:
@@ -517,8 +509,30 @@ def get_cell_theta_over_time(track: Track, tolerance: int = 0.3, south: bool = F
             theta, _ = get_shape_theta(cell_shape, velocities[i], south)
             frames_and_thetas.append([frame, theta])
             last_area = area
-
     return np.array(frames_and_thetas)
+
+def get_point_trayectory_and_instant_change(cell_shape_evolution: List[Cell_Shape], point_index: int):
+    """
+    Analyze the trajectory and instantaneous change of a specific outline point over time.
+
+    Projects the movement of a selected point on the cell outline onto its principal axis (via PCA),
+    computes its relative displacement from the starting position, and calculates the instantaneous change (derivative).
+
+    Args:
+        cell_shape_evolution (List[Cell_Shape]): List of cell shapes over time (frames, n_points, 2).
+        point_index (int): Index of the outline point to analyze.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]:
+            - Relative displacement of the point over time.
+            - Instantaneous change (first derivative) of the displacement.
+    """
+    point_of_interest = cell_shape_evolution[:, point_index] 
+    pca = PCA(n_components=1) 
+    X_pca = pca.fit_transform(point_of_interest).flatten() 
+    X_relative = abs(X_pca - X_pca[0]) 
+    dx = np.diff(X_relative, 1)
+    return X_relative, dx
 
 #Saving final entries
 def track_to_tiff_files(track: Track, index: int, tif_files: List[Path], output_path: Path, top_con: float, bottom_con: float, y_sup: int, x_sup: int, radius: float, flip: bool) -> Track_Info:
@@ -661,3 +675,4 @@ def create_data_entries(top_con: float, bottom_con: float, tracks: List[Track], 
         except Exception:
             traceback.print_exc()
             shutil.rmtree(output_folder)
+    return

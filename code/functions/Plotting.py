@@ -8,10 +8,9 @@ import imageio.v2 as imageio
 import matplotlib.pyplot as plt
 from typing import List, Callable
 from matplotlib.lines import Line2D
-from sklearn.decomposition import PCA
 from .Datastructures import Cell, Track, Track_Info_Point, Cell_Shape
 from .Miscellaneous import load_track_from_db, get_tif_files, flip_track, flip_tracks
-from .DIC_analysis import get_cells_per_frame_from_tracks, get_shape_theta, get_track_velocities
+from .DIC_analysis import get_cells_per_frame_from_tracks, get_shape_theta, get_track_velocities, get_point_trayectory_and_instant_change
 
 # Helper
 def gif(func: Callable) -> Callable:
@@ -136,8 +135,8 @@ def create_mask_frame(mask: Path, frame: int, tif_file: Path =".", background: b
     image = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
     image = image.reshape((height, width, 4)) 
     image = image[:,:,:3] 
-    plt.close(fig)
     
+    plt.close(fig)
     return image
 
 @gif
@@ -177,7 +176,6 @@ def create_mask_gif(path_to_masks: Path, file_name: str, output_path: Path, path
     for frame, mask in tqdm(enumerate(masks[:(cap + 1)]), desc="🎬 Creating GIF", file=sys.stdout, total=min(len(masks), cap)):        
         image = create_mask_frame(mask, frame, tif_files[frame], background, mask_alpha, dpi)
         images.append(image)
-
     return images
 
 
@@ -239,8 +237,8 @@ def create_track_frame_from_raw_tiffs(track: Track, frame: int, background: bool
     image = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
     image = image.reshape((height, width, 4)) 
     image = image[:,:,:3] 
-    plt.close(fig)
     
+    plt.close(fig)
     return image
 
 @gif
@@ -285,7 +283,6 @@ def create_track_gif_from_raw_tiffs(track: Track, file_name: str, output_path: P
     for frame in tqdm(range(min(cap, len(track)), desc="🎬 Creating GIF", file=sys.stdout)):
         image = create_track_frame_from_raw_tiffs(track, frame, background, tif_files[frame], vmin, vmax, y_min, y_max, x_min, x_max, dpi)
         images.append(image)
-
     return images
 
 
@@ -334,8 +331,8 @@ def create_track_frame_from_db_entry(position: Track_Info_Point, tif_file: Path,
     image = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
     image = image.reshape((height, width, 4)) 
     image = image[:,:,:3] 
-    plt.close(fig)
     
+    plt.close(fig)
     return image
 
 @gif
@@ -371,8 +368,7 @@ def create_track_gif_from_db_entry(entry_path: Path, file_name: str, output_path
     images = []
     for p, pos in tqdm(enumerate(track[:(cap + 1)]), desc="🎬 Creating GIF", total=len(track[:(cap + 1)])):
         image = create_track_frame_from_db_entry(pos, tif_files[p], background, vmin, vmax, dpi)
-        images.append(image)
-        
+        images.append(image)    
     return images
   
    
@@ -456,7 +452,6 @@ def create_outlines_gif_from_cells_per_frame(cells_per_frame: List[List[Cell]], 
     for frame, cells in enumerate(tqdm(cells_per_frame[:(cap + 1)], desc="🎬 Creating GIF", file=sys.stdout)):
         image = create_outlines_frame(cells, frame, tif_files[frame], background, vmin, vmax, dpi)
         images.append(image)
-
     return images
 
 def create_outlines_gif_from_tracks(tracks: List[Track], file_name: str, output_path: Path, path_to_tifs: Path = Path("."), background: bool = False, flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
@@ -574,6 +569,7 @@ def create_all_tracks_frame(tracks: List[Track], colors: List[plt.cm.tab20], max
     image = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
     image = image.reshape((height, width, 4)) 
     image = image[:,:,:3] 
+    
     plt.close(fig)
     return image
 
@@ -609,8 +605,7 @@ def create_all_tracks_gif_from_tracks(tracks: List[Track], file_name: str, outpu
     images = []
     for frame in tqdm(range(min(max_frame, cap)), desc="🎬 Creating GIF", file=sys.stdout):
         image = create_all_tracks_frame(tracks, colors, frame, tif_files[frame], background, vmin, vmax, dpi)
-        images.append(image)
-        
+        images.append(image)    
     return images
 
 def create_all_tracks_gif_from_path_to_tracks(path_to_tracks: Path, file_name: str, output_path: Path, root_masks: Path = Path("../masks/"), background: bool = False, root_tifs: Path = Path("../data/"), flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100):
@@ -727,7 +722,6 @@ def create_shape_evolution_gif(shape_evolution: List[Cell_Shape], file_name: str
     for frame_index in tqdm(range(1, min(num_frames, cap)), desc="🎬 Creating GIF", file=sys.stdout):
         image = create_shape_evolution_frame(shape_evolution, n_points, num_frames, frame_index, colors, dpi)
         images.append(image) 
-
     return images
 
 def create_shape_evolution_gif_from_db_entry(entry: Path, file_name: str, output_path: Path, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
@@ -840,7 +834,6 @@ def create_shape_theta_gif_from_track(track: Track, file_name: str, output_path:
     for i, pos in tqdm(enumerate(track[:(cap + 1)]), desc="🎬 Creating GIF", file=sys.stdout, total=len(track[:(cap + 1)])):
         image = create_shape_theta_frame(pos["cell"]["shape"], velocities[i], south, dpi)
         images.append(image)
-        
     return images
 
 def create_shape_theta_gif_from_db_entry(entry: Path, file_name: str, output_path: Path, south: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
@@ -877,33 +870,28 @@ def plot_point_trayectory_and_instant_change(cell_shape_evolution: List[Cell_Sha
     Returns:
         np.ndarray: Array of relative displacements for the point.
     """
-    point_of_interest = cell_shape_evolution[:, point_index] 
-    pca = PCA(n_components=1) 
-    X_pca = pca.fit_transform(point_of_interest).flatten() 
-    X_relative = abs(X_pca - X_pca[0]) 
-    dx = np.diff(X_relative, 1)
+    X_relative, dx = get_point_trayectory_and_instant_change(cell_shape_evolution, point_index)
     
-    fig, axes = plt.subplots(2, 1, figsize=(10,7))  # 1 row, 2 columns
+    _, ax = plt.subplots(2, 1, figsize=(10,7))
 
-    # Left plot: Trajectory
-    axes[0].plot(np.arange(len(X_relative)), X_relative, color='blue', alpha=0.5, linewidth=2, label='Displacement')
-    axes[0].scatter(np.arange(len(X_relative)), X_relative, color='red', s=50, label='Point values')
-    axes[0].set_title(f"Trajectory of Point {point_index}", fontsize=14)
-    axes[0].set_xlabel("Time step")
-    axes[0].set_ylabel("Displacement")
-    axes[0].grid(True, linestyle='--', alpha=0.5)
-    axes[0].legend()
+    # Trajectory
+    ax[0].plot(np.arange(len(X_relative)), X_relative, color='blue', alpha=0.5, linewidth=2, label='Displacement')
+    ax[0].scatter(np.arange(len(X_relative)), X_relative, color='red', s=50, label='Point values')
+    ax[0].set_title(f"Trajectory of Point {point_index}", fontsize=14)
+    ax[0].set_xlabel("Time step")
+    ax[0].set_ylabel("Displacement")
+    ax[0].grid(True, linestyle='--', alpha=0.5)
+    ax[0].legend()
 
-    # Right plot: Derivative
-    axes[1].plot(np.arange(len(dx)), dx, color='green', alpha=0.5, linewidth=2, label='Derivative')
-    axes[1].scatter(np.arange(len(dx)), dx, color='orange', s=50, label='Instantaneous change')
-    axes[1].set_title(f"Instantaneous Change of Point {point_index}", fontsize=14)
-    axes[1].set_xlabel("Time step")
-    axes[1].set_ylabel("Change")
-    axes[1].grid(True, linestyle='--', alpha=0.5)
-    axes[1].legend()
+    # Derivative
+    ax[1].plot(np.arange(len(dx)), dx, color='green', alpha=0.5, linewidth=2, label='Derivative')
+    ax[1].scatter(np.arange(len(dx)), dx, color='orange', s=50, label='Instantaneous change')
+    ax[1].set_title(f"Instantaneous Change of Point {point_index}", fontsize=14)
+    ax[1].set_xlabel("Time step")
+    ax[1].set_ylabel("Change")
+    ax[1].grid(True, linestyle='--', alpha=0.5)
+    ax[1].legend()
 
     plt.tight_layout()
     plt.show()
-    
     return X_relative
