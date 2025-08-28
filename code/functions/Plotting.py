@@ -15,6 +15,11 @@ from .DIC_analysis import get_cells_per_frame_from_tracks, get_shape_theta, get_
 
 # Helper
 def gif(func: Callable) -> Callable:
+    """
+    Decorator to save the output of a function as a GIF file.
+
+    Wraps a function that returns a list of images, saves them as a GIF, and prints the output path.
+    """
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         # Bind args/kwargs to the function's signature
@@ -39,6 +44,22 @@ def gif(func: Callable) -> Callable:
     return wrapper
 
 def create_gif_from_tracks_path(func: Callable, path_to_tracks: Path, file_name: str, output_path: Path, root_masks: Path = Path("../masks/"), background: bool = False, root_tifs: Path = Path("../data/"), flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
+    """
+    Loads tracks from a file and calls a plotting function to generate a GIF.
+
+    Args:
+        func (Callable): The plotting function to call.
+        path_to_tracks (Path): Path to the tracks file.
+        file_name (str): Output GIF file name.
+        output_path (Path): Output directory.
+        root_masks (Path): Root path for masks.
+        background (bool): Whether to use background images.
+        root_tifs (Path): Root path for TIFFs.
+        flip (bool): Whether to flip tracks.
+        cap (int): Maximum number of frames.
+        frame (int): Specific frame to plot.
+        dpi (int): Image DPI.
+    """
     tracks = np.load(Path(path_to_tracks), allow_pickle=True)
     relative = (Path(path_to_tracks).relative_to(Path(root_masks))).parent
     
@@ -50,6 +71,13 @@ def create_gif_from_tracks_path(func: Callable, path_to_tracks: Path, file_name:
     return func(tracks, file_name, output_path, path_to_tifs, background, flip, cap, frame, dpi)
 
 def plot_frame(image: np.ndarray, dpi: int) -> None:
+    """
+    Display a single image frame using matplotlib.
+
+    Args:
+        image (np.ndarray): The image to display.
+        dpi (int): Dots per inch for the figure.
+    """
     plt.figure(figsize=(6, 6), dpi=dpi)
     plt.imshow(image)
     plt.axis("off")
@@ -155,6 +183,27 @@ def create_mask_gif(path_to_masks: Path, file_name: str, output_path: Path, path
 
 # Track from raw tiff
 def create_track_frame_from_raw_tiffs(track: Track, frame: int, background: bool, tif_file: Path, vmin: int, vmax: int, y_min: int, y_max: int, x_min: int, x_max: int, dpi: int = 100) -> np.ndarray:
+    """
+    Generate a single frame visualizing a cell track from raw TIFF images.
+
+    Plots the cell outline and centroid for a given frame, optionally overlaying a cropped background TIFF image.
+
+    Args:
+        track (Track): List of cell positions for the track.
+        frame (int): Frame index to visualize.
+        background (bool): Whether to overlay the background image.
+        tif_file (Path): Path to the TIFF file for background.
+        vmin (int): Minimum intensity for background image.
+        vmax (int): Maximum intensity for background image.
+        y_min (int): Minimum y-coordinate for cropping.
+        y_max (int): Maximum y-coordinate for cropping.
+        x_min (int): Minimum x-coordinate for cropping.
+        x_max (int): Maximum x-coordinate for cropping.
+        dpi (int, optional): Dots per inch for the figure.
+
+    Returns:
+        np.ndarray: RGB image of the frame.
+    """
     position = track[frame]
     cell = position["cell"]
 
@@ -242,6 +291,22 @@ def create_track_gif_from_raw_tiffs(track: Track, file_name: str, output_path: P
 
 # Track from db entry
 def create_track_frame_from_db_entry(position: Track_Info_Point, tif_file: Path, background: bool, vmin: int, vmax: int, dpi: int = 100):
+    """
+    Generate a single frame visualizing a cell from a database entry.
+
+    Plots the cell outline for a given position, optionally overlaying a background TIFF image.
+
+    Args:
+        position (Track_Info_Point): Cell position and info for the frame.
+        tif_file (Path): Path to the TIFF file for background.
+        background (bool): Whether to overlay the background image.
+        vmin (int): Minimum intensity for background image.
+        vmax (int): Maximum intensity for background image.
+        dpi (int, optional): Dots per inch for the figure.
+
+    Returns:
+        np.ndarray: RGB image of the frame.
+    """
     frame = position["frame"]
     cell = position["cell"]
 
@@ -275,6 +340,23 @@ def create_track_frame_from_db_entry(position: Track_Info_Point, tif_file: Path,
 
 @gif
 def create_track_gif_from_db_entry(entry_path: Path, file_name: str, output_path: Path, background: bool, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
+    """
+    Create a GIF visualizing a cell track loaded from a database entry.
+
+    Loads a track from a database and generates a GIF showing the cell's outline and position over time.
+
+    Args:
+        entry_path (Path): Path to the database entry.
+        file_name (str): Output GIF file name (without extension).
+        output_path (Path): Directory to save the GIF.
+        background (bool): Whether to overlay background images.
+        cap (int, optional): Maximum number of frames.
+        frame (int, optional): If provided, only display a single frame.
+        dpi (int, optional): Dots per inch for the figure.
+
+    Returns:
+        None
+    """
     entry_path = Path(entry_path)
     output_path = Path(output_path)
 
@@ -296,6 +378,23 @@ def create_track_gif_from_db_entry(entry_path: Path, file_name: str, output_path
    
 # Outlines     
 def create_outlines_frame(cells: List[Cell], frame_index: int, tif_file: Path, background: bool, vmin: int, vmax: int, dpi: int = 100) -> np.ndarray:
+    """
+    Generate a single frame visualizing cell outlines for a given frame.
+
+    Plots the outlines of all cells in the frame, optionally overlaying a background TIFF image.
+
+    Args:
+        cells (List[Cell]): List of cells to plot.
+        frame_index (int): Index of the frame.
+        tif_file (Path): Path to the TIFF file for background.
+        background (bool): Whether to overlay the background image.
+        vmin (int): Minimum intensity for background image.
+        vmax (int): Maximum intensity for background image.
+        dpi (int, optional): Dots per inch for the figure.
+
+    Returns:
+        np.ndarray: RGB image of the frame.
+    """
     fig, ax = plt.subplots(dpi=dpi)
     ax.set_title(f"Frame {frame_index}")
 
@@ -388,11 +487,49 @@ def create_outlines_gif_from_tracks(tracks: List[Track], file_name: str, output_
     create_outlines_gif_from_cells_per_frame(cells_per_frame[:(cap + 1)], file_name, output_path, path_to_tifs, background, cap, frame, dpi)
 
 def create_outlines_gif_from_path_to_tracks(path_to_tracks: Path, file_name: str, output_path: Path, root_masks: Path = Path("../masks/"), background: bool = False, root_tifs: Path = Path("../data/"), flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100):
+    """
+    Create a GIF of cell outlines from a path to tracks file.
+
+    Loads tracks from a file and generates a GIF visualizing cell outlines for each frame.
+
+    Args:
+        path_to_tracks (Path): Path to the tracks file.
+        file_name (str): Output GIF file name (without extension).
+        output_path (Path): Directory to save the GIF.
+        root_masks (Path, optional): Root path for masks.
+        background (bool, optional): Whether to overlay background images.
+        root_tifs (Path, optional): Root path for TIFFs.
+        flip (bool, optional): Whether to flip tracks.
+        cap (int, optional): Maximum number of frames.
+        frame (int, optional): If provided, only display a single frame.
+        dpi (int, optional): Dots per inch for the figure.
+
+    Returns:
+        None
+    """
     create_gif_from_tracks_path(create_outlines_gif_from_tracks, path_to_tracks, file_name, output_path, root_masks, background, root_tifs, flip, cap, frame, dpi)
 
 
 # All Tracks
 def create_all_tracks_frame(tracks: List[Track], colors: List[plt.cm.tab20], max_frame: int, tif_file: Path, background: bool, vmin: int, vmax: int, dpi: int = 100) -> np.ndarray:
+    """
+    Generate a single frame visualizing all cell tracks up to a given frame.
+
+    Plots the trajectories and outlines of all tracks up to the specified frame, optionally overlaying a background TIFF image.
+
+    Args:
+        tracks (List[Track]): List of cell tracks.
+        colors (List): List of colors for each track.
+        max_frame (int): Maximum frame index to visualize.
+        tif_file (Path): Path to the TIFF file for background.
+        background (bool): Whether to overlay the background image.
+        vmin (int): Minimum intensity for background image.
+        vmax (int): Maximum intensity for background image.
+        dpi (int, optional): Dots per inch for the figure.
+
+    Returns:
+        np.ndarray: RGB image of the frame.
+    """
     fig, ax = plt.subplots(figsize=(6,6), dpi=dpi)
     for t, track in enumerate(tracks):
         color = colors[t]
@@ -477,11 +614,47 @@ def create_all_tracks_gif_from_tracks(tracks: List[Track], file_name: str, outpu
     return images
 
 def create_all_tracks_gif_from_path_to_tracks(path_to_tracks: Path, file_name: str, output_path: Path, root_masks: Path = Path("../masks/"), background: bool = False, root_tifs: Path = Path("../data/"), flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100):
+    """
+    Create a GIF of all cell tracks from a path to tracks file.
+
+    Loads tracks from a file and generates a GIF visualizing all cell tracks for each frame.
+
+    Args:
+        path_to_tracks (Path): Path to the tracks file.
+        file_name (str): Output GIF file name (without extension).
+        output_path (Path): Directory to save the GIF.
+        root_masks (Path, optional): Root path for masks.
+        background (bool, optional): Whether to overlay background images.
+        root_tifs (Path, optional): Root path for TIFFs.
+        flip (bool, optional): Whether to flip tracks.
+        cap (int, optional): Maximum number of frames.
+        frame (int, optional): If provided, only display a single frame.
+        dpi (int, optional): Dots per inch for the figure.
+
+    Returns:
+        None
+    """
     create_gif_from_tracks_path(create_all_tracks_gif_from_tracks, path_to_tracks, file_name, output_path, root_masks, background, root_tifs, flip, cap, frame, dpi)
 
 
 # Shape evolution
 def create_shape_evolution_frame(shape_evolution: List[Cell_Shape], n_points: int, num_frames: int, frame_index: int, colors: plt.cm.hsv, dpi: int = 100) -> np.ndarray:
+    """
+    Generate a single frame showing the evolution of cell shape over time.
+
+    Plots the trajectories of each outline point for the last 20 frames, using fading colors to indicate progression.
+
+    Args:
+        shape_evolution (List[Cell_Shape]): Array of cell shapes over time.
+        n_points (int): Number of outline points.
+        num_frames (int): Total number of frames.
+        frame_index (int): Current frame index to visualize.
+        colors (plt.cm.hsv): Colormap for point trajectories.
+        dpi (int, optional): Dots per inch for the figure.
+
+    Returns:
+        np.ndarray: RGB image of the frame.
+    """
     fig, ax = plt.subplots(dpi=dpi)
 
     for point in range(n_points):
@@ -558,6 +731,22 @@ def create_shape_evolution_gif(shape_evolution: List[Cell_Shape], file_name: str
     return images
 
 def create_shape_evolution_gif_from_db_entry(entry: Path, file_name: str, output_path: Path, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
+    """
+    Create a GIF showing the evolution of cell shape from a database entry.
+
+    Loads a track from a database and generates a GIF visualizing the cell's shape changes over time.
+
+    Args:
+        entry (Path): Path to the database entry.
+        file_name (str): Output GIF file name (without extension).
+        output_path (Path): Directory to save the GIF.
+        cap (int, optional): Maximum number of frames.
+        frame (int, optional): If provided, only display a single frame.
+        dpi (int, optional): Dots per inch for the figure.
+
+    Returns:
+        None
+    """
     track = load_track_from_db(entry)
     cell_shape_evolution = np.array([pos["cell"]["shape"] for pos in track])
     create_shape_evolution_gif(cell_shape_evolution, file_name, output_path, cap, frame, dpi)
@@ -640,9 +829,6 @@ def create_shape_theta_gif_from_track(track: Track, file_name: str, output_path:
         output_path (Path): Directory where the resulting GIF will be saved.
         cap (int, optional): Cap the max amount of frames of the GIF.
         frame (int, optional): If provided, only display a single frame instead of creating a full GIF.
-
-    Returns:
-        None
     """
     velocities = get_track_velocities(track)
     if frame is not None:
@@ -658,10 +844,39 @@ def create_shape_theta_gif_from_track(track: Track, file_name: str, output_path:
     return images
 
 def create_shape_theta_gif_from_db_entry(entry: Path, file_name: str, output_path: Path, south: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> None:
+    """
+    Create a GIF visualizing cell orientation (theta) from a database entry.
+
+    Loads a track from a database and generates a GIF showing the orientation of the cell shape over time.
+
+    Args:
+        entry (Path): Path to the database entry.
+        file_name (str): Output GIF file name (without extension).
+        output_path (Path): Directory to save the GIF.
+        south (bool, optional): Whether gradient arrow should point south.
+        cap (int, optional): Maximum number of frames.
+        frame (int, optional): If provided, only display a single frame.
+        dpi (int, optional): Dots per inch for the figure.
+
+    Returns:
+        None
+    """
     track = load_track_from_db(entry)
     create_shape_theta_gif_from_track(track, file_name, output_path, south, cap, frame, dpi)
     
 def plot_point_trayectory_and_instant_change(cell_shape_evolution: List[Cell_Shape], point_index: int) -> np.ndarray: 
+    """
+    Plot the trajectory and instantaneous change of a specific point on a cell outline.
+
+    Generates two plots: one showing the displacement of the point over time, and one showing the instantaneous change (derivative).
+
+    Args:
+        cell_shape_evolution (List[Cell_Shape]): List of cell shapes over time.
+        point_index (int): Index of the point to analyze.
+
+    Returns:
+        np.ndarray: Array of relative displacements for the point.
+    """
     point_of_interest = cell_shape_evolution[:, point_index] 
     pca = PCA(n_components=1) 
     X_pca = pca.fit_transform(point_of_interest).flatten() 
