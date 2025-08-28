@@ -426,6 +426,24 @@ def track_cells_and_get_elongations(path_to_masks: Path, buffer: int = 50, max_d
             file.write(line + "\n")
     return tracks
 
+def get_cell_shape_evolution_from_track(track: Track) -> List[Cell_Shape]:
+    """
+    Get the cell shape evolution from the track.
+    
+    Args:
+        track (Track): A list of TrackPoints, each containing:
+            - 'frame' (int): frame index
+            - 'cell' (Cell): cell data, including:
+                - 'shape' (np.ndarray, shape: n_points x 2): the cell boundary
+                - 'centroid' (np.ndarray, shape: 2): the cell center
+        step (int, optional): number of frames used to calculate the speed
+
+    Returns:
+        List of the cell shapes
+    """
+    return np.array([pos["cell"]["shape"] for pos in track])
+
+
 def get_track_velocities(track: Track, step: int = 10) -> np.ndarray:
     """Calculate the track velocities
 

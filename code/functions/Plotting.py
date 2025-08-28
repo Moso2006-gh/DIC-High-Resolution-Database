@@ -11,7 +11,7 @@ from typing import List, Callable
 from matplotlib.lines import Line2D
 from .Datastructures import Cell, Track, Track_Info_Point, Cell_Shape
 from .Miscellaneous import load_track_from_db, get_tif_files, flip_track, flip_tracks
-from .DIC_analysis import get_cells_per_frame_from_tracks, get_shape_theta, get_track_velocities, get_point_trayectory_and_instant_change
+from .DIC_analysis import get_cells_per_frame_from_tracks, get_shape_theta, get_track_velocities, get_point_trayectory_and_instant_change, get_cell_shape_evolution_from_track
 
 # Helper
 def gif(func: Callable) -> Callable:
@@ -28,25 +28,27 @@ def gif(func: Callable) -> Callable:
 
         file_name = bound.arguments["file_name"]
         output_path = bound.arguments["output_path"]
+        frame = bound.arguments["frame"]
 
         images = func(*args, **kwargs)
 
-        output_file = Path(output_path) / f"{file_name}.gif"
-        output_file.parent.mkdir(exist_ok=True, parents=True)
-        
-        frames_pil = [Image.fromarray(frame) for frame in images]
+        if frame is None:
+            output_file = Path(output_path) / f"{file_name}.gif"
+            output_file.parent.mkdir(exist_ok=True, parents=True)
+            
+            frames_pil = [Image.fromarray(frame) for frame in images]
 
-        palette_frame = frames_pil[0].convert('P', palette=Image.ADAPTIVE, colors=256)
+            palette_frame = frames_pil[0].convert('P', palette=Image.ADAPTIVE, colors=256)
 
-        fixed_frames = [frame.quantize(palette=palette_frame, dither=Image.NONE) for frame in frames_pil]
-        fixed_frames[0].save(
-            output_file,
-            save_all=True,
-            append_images=fixed_frames[1:],
-            loop=0
-        )
+            fixed_frames = [frame.quantize(palette=palette_frame, dither=Image.NONE) for frame in frames_pil]
+            fixed_frames[0].save(
+                output_file,
+                save_all=True,
+                append_images=fixed_frames[1:],
+                loop=0
+            )
 
-        print(f"🎬 Saved GIF to {output_file}")
+            print(f"🎬 Saved GIF to {output_file}")
         return images
     return wrapper
 
@@ -885,8 +887,10 @@ def create_shape_theta_gif_from_db_entry(entry: Path, file_name: str, output_pat
     """
     track = load_track_from_db(entry)
     create_shape_theta_gif_from_track(track, file_name, output_path, south, cap, frame, dpi)
-    
-def plot_point_trayectory_and_instant_change(cell_shape_evolution: List[Cell_Shape], point_index: int) -> np.ndarray: 
+
+
+# Point trayectory
+def plot_point_trayectory_and_instant_change(cell_shape_evolution: List[Cell_Shape], point_index: int, dpi: int = 100) -> np.ndarray: 
     """
     Plot the trajectory and instantaneous change of a specific point on a cell outline.
 
@@ -901,7 +905,7 @@ def plot_point_trayectory_and_instant_change(cell_shape_evolution: List[Cell_Sha
     """
     X_relative, dx = get_point_trayectory_and_instant_change(cell_shape_evolution, point_index)
     
-    _, ax = plt.subplots(2, 1, figsize=(10,7))
+    _, ax = plt.subplots(2, 1, figsize=(10,7), dpi=dpi)
 
     # Trajectory
     ax[0].plot(np.arange(len(X_relative)), X_relative, color='blue', alpha=0.5, linewidth=2, label='Displacement')
@@ -924,3 +928,4 @@ def plot_point_trayectory_and_instant_change(cell_shape_evolution: List[Cell_Sha
     plt.tight_layout()
     plt.show()
     return X_relative
+

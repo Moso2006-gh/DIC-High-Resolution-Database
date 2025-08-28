@@ -3,5 +3,3 @@
 !code/
 !code/**
 !*.gitignore
-
-*.ipynb
