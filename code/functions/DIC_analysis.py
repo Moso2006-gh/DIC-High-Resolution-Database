@@ -458,7 +458,8 @@ def get_track_velocities(track: Track, step: int = 10) -> np.ndarray:
     return velocities
 
 def get_shape_theta(cell_shape: Cell_Shape, velocity: np.ndarray, south: bool = False) -> Tuple[float, np.ndarray]:
-    """Compute the orientation angle of a cell shape relative to a reference direction.
+    """
+    Compute the orientation angle of a cell shape relative to a reference direction.
 
     Uses Singular Value Decomposition (SVD) to determine the principal axis of the cell shape
     and calculates the angle between this axis and a fixed horizontal direction (left or right),
