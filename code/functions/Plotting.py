@@ -50,6 +50,34 @@ def gif(func: Callable) -> Callable:
         return images
     return wrapper
 
+def to_individual_frames(func: Callable) -> Callable:
+    """
+    Decorator to save images of a function as individual frames inside a subdire with the GIF file name.
+
+    Wraps a function that returns a list of images, saves them as a GIF, and prints the output path.
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        sig = inspect.signature(func)
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+
+        file_name = bound.arguments["file_name"]
+        output_path = bound.arguments["output_path"]
+
+        images = func(*args, **kwargs)
+
+        # Destination folder
+        dst_folder = Path(output_path) / file_name
+        dst_folder.mkdir(exist_ok=True, parents=True)
+        
+        # Save each numpy array as an image
+        for i, img_array in enumerate(images, 1):
+            img = Image.fromarray(img_array)
+            img.save(dst_folder / f"{i}.png")
+        return images
+    return wrapper
+
 def create_gif_from_tracks_path(func: Callable, path_to_tracks: Path, file_name: str, output_path: Path, root_masks: Path = Path("../masks/"), background: bool = False, root_tifs: Path = Path("../data/"), flip: bool = False, cap: int = 9000, frame: int = None, dpi: int = 100) -> List[np.ndarray]:
     """
     Loads tracks from a file and calls a plotting function to generate a GIF.
@@ -368,7 +396,7 @@ def create_track_gif_from_db_entry(entry_path: Path, file_name: str, output_path
 
     if frame is not None:
         image = create_track_frame_from_db_entry(track[frame], tif_files[frame], background, vmin, vmax, dpi)
-        return plot_frame(image)
+        return plot_frame(image, dpi)
     
     images = []
     for p, pos in tqdm(enumerate(track[:(cap + 1)]), desc="🎬 Creating GIF", total=len(track[:(cap + 1)])):

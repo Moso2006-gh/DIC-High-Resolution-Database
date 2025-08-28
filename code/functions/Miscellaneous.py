@@ -1,3 +1,4 @@
+import re
 import sys
 import json
 import numpy as np
@@ -42,6 +43,11 @@ def create_log(name_of_log : str, path_to_logs : Path) -> None:
     sys.stderr = Tee(sys.__stderr__, log_file)
     return None
 
+def natural_key(filename):
+    "Key to extract a number from a file"
+    parts = re.split(r'(\d+)', filename)
+    return [int(part) if part.isdigit() else part.lower() for part in parts]
+
 def get_tif_files(path_to_tifs: Path, background: bool, max_length=9000) -> Tuple[np.ndarray, int, int]:
     """
     Retrieve TIFF files and intensity bounds for background plotting.
@@ -56,7 +62,7 @@ def get_tif_files(path_to_tifs: Path, background: bool, max_length=9000) -> Tupl
                otherwise (np.zeros array of max_length).
     """
     if background:
-        tif_files = sorted(Path(path_to_tifs).glob("*.tif"))
+        tif_files = sorted(Path(path_to_tifs).glob("*.tif"), key=lambda f: natural_key(f.stem))
         background_img = imageio.imread(tif_files[0])
         vmin, vmax = np.percentile(background_img, [0.01, 99.9])  # 1st and 99th percentiles
         return tif_files, vmin, vmax
